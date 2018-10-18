@@ -3,6 +3,7 @@ package com.heitor.cursomc.services;
 import java.util.Date;
 import java.util.Optional;
 
+import javax.transaction.Transactional;
 import javax.validation.Valid;
 
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,10 +13,10 @@ import com.heitor.cursomc.domain.ItemPedido;
 import com.heitor.cursomc.domain.PagamentoComBoleto;
 import com.heitor.cursomc.domain.Pedido;
 import com.heitor.cursomc.domain.enums.EstadoPagamento;
+import com.heitor.cursomc.repositories.ClienteRepository;
 import com.heitor.cursomc.repositories.ItemPedidoRepository;
 import com.heitor.cursomc.repositories.PagamentoRepository;
 import com.heitor.cursomc.repositories.PedidoRepository;
-import com.heitor.cursomc.repositories.ProdutoRepository;
 import com.heitor.cursomc.services.exceptions.ObjectNotFoundException;
 
 @Service
@@ -36,17 +37,22 @@ public class PedidoService {
 	@Autowired
 	private ItemPedidoRepository itemPedidoRepository;
 	
+	@Autowired
+	private ClienteService clienteService;
+	
 	public Pedido find(Integer id) {
 		Optional<Pedido> obj = repo.findById(id);
 		return obj.orElseThrow(() -> new ObjectNotFoundException("Objeto não encontrado! Id: " 
 							+ id + ", Tipo: " + Pedido.class.getName()));
 	}
 
+	@Transactional
 	public @Valid Pedido insert(@Valid Pedido obj) {
 		obj.setId(null);
 		obj.setInstante(new Date());
 		obj.getPagamento().setEstado(EstadoPagamento.PENDENTE);
 		obj.getPagamento().setPedido(obj);
+		obj.setCliente(clienteService.find(obj.getCliente().getId()));
 		if (obj.getPagamento() instanceof PagamentoComBoleto) {
 			PagamentoComBoleto pagto = (PagamentoComBoleto) obj.getPagamento();
 			boletoService.preencherPagamentoComBoleto(pagto, obj.getInstante());
@@ -55,10 +61,12 @@ public class PedidoService {
 		pagamentoRepository.save(obj.getPagamento());
 		for(ItemPedido ip : obj.getItens()) {
 			ip.setDesconto(0.0);
-			ip.setPreco(produtoService.find(ip.getProduto().getId()).getPreco());
+			ip.setProduto(produtoService.find(ip.getProduto().getId()));
+			ip.setPreco(ip.getProduto().getPreco());
 			ip.setPedido(obj);
 		}
 		itemPedidoRepository.saveAll(obj.getItens());
+		System.out.println(obj);
 		return obj;
 	}
 	
